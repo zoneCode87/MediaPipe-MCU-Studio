@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediaPipe-MCU-Studio // AI Vision &amp; Serial Telemetry Bridge</title>
+
+    <!-- TuiCss BIOS Style Library -->
+    <link rel="stylesheet" href="./dist/tuicss.min.css">
+    <script src="./dist/tuicss.min.js"></script>
+
+    <!-- MediaPipe AI Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.1/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils@0.1/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.2/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.1/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection@0.0/face_detection.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.1/face_mesh.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.2/pose.js" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            background-color: #000000;
+            margin: 0;
+            padding: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        .bios-shell {
+            width: 1140px;
+            max-width: 100%;
+            min-height: 750px;
+            position: relative;
+            padding-bottom: 42px;
+            box-sizing: border-box;
+        }
+
+        .bios-grid {
+            display: grid;
+            grid-template-columns: 55% 45%;
+            gap: 12px;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        @media (max-width: 960px) {
+            .bios-grid {
+                grid-template-columns: 100%;
+            }
+        }
+
+        .tui-window {
+            width: 100%;
+            box-sizing: border-box;
+            display: block;
+        }
+
+        .tui-fieldset {
+            width: 100%;
+            box-sizing: border-box;
+            margin: 0;
+        }
+
+        .cam-viewport {
+            width: 100%;
+            background: #000;
+            border: 2px solid #0000a8;
+            display: block;
+            aspect-ratio: 4 / 3;
+            max-height: 450px;
+            object-fit: contain;
+        }
+
+        .bios-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .bios-row label {
+            color: #0000a8;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+        }
+
+        .bios-row input[type="checkbox"] {
+            width: 18px !important;
+            height: 18px !important;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .finger-boxes {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 6px;
+            margin-top: 8px;
+            text-align: center;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .finger-item {
+            border: 2px solid #0000a8;
+            padding: 5px 2px;
+            background: #a8a8a8;
+            color: #000;
+            font-size: 12px;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        .finger-item.open {
+            background: #00a800;
+            color: #ffffff;
+        }
+
+        .finger-item.closed {
+            background: #a80000;
+            color: #ffffff;
+        }
+
+        .model-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 10px;
+        }
+
+        .code-box {
+            font-family: "Perfect DOS VGA 437", monospace;
+            white-space: pre;
+            overflow: auto;
+            background: #0000a8;
+            color: #ffff55;
+            padding: 10px;
+            height: 460px;
+            border: 2px solid #ffffff;
+            user-select: text;
+        }
+    </style>
+</head>
+
+<body class="tui-bg-blue-black">
+
+    <!-- Hidden Raw Webcam Video Input -->
+    <video id="input_video" style="display: none;"></video>
+
+    <!-- Main BIOS Screen Frame -->
+    <div class="bios-shell bordered white-168">
+
+        <!-- Top Studio Title Banner -->
+        <div class="tui-panel cyan-168 full-width black-255-text tui-no-shadow center" style="padding: 5px 0; font-weight: bold;">
+            MEDIAPIPE-MCU-STUDIO // AI VISION &amp; HARDWARE SERIAL BRIDGE v2.0
+            <span class="tui-datetime right" data-format="H:m:s" style="margin-right: 12px;"></span>
+        </div>
+
+        <!-- BIOS Navigation Tabs (Header Bar) -->
+        <div class="tui-tabs">
+            <ul>
+                <li><a class="tui-tab active" data-tab-content="tab-vision">1. AI Vision &amp; Serial</a></li>
+                <li><a class="tui-tab" data-tab-content="tab-arduino">2. Arduino / ESP32 Code</a></li>
+                <li><a class="tui-tab" data-tab-content="tab-docs">3. SerialBridge JS Docs</a></li>
+            </ul>
+        </div>
+
+        <!-- ==================== TAB 1: MAIN AI VISION & SERIAL CONTROL ==================== -->
+        <div class="tui-tab-content tui-content" id="tab-vision" style="padding: 6px;">
+            <div class="bios-grid">
+
+                <!-- LEFT COLUMN: CAMERA VIEWPORT & MODEL SWITCHER -->
+                <div>
+                    <div class="tui-window blue-168 white-text full-width tui-no-shadow">
+                        <fieldset class="tui-fieldset">
+                            <legend class="center yellow-255-text">[ CAM_01 // LIVE AI VISION STREAM ]</legend>
+                            <canvas id="output_canvas" class="cam-viewport" width="640" height="480"></canvas>
+
+                            <!-- Model Switcher Buttons -->
+                            <div class="model-bar">
+                                <button class="tui-button cyan-168 black-255-text model-select-btn" data-model="hands">1:HANDS</button>
+                                <button class="tui-button blue-168 white-255-text model-select-btn" data-model="face">2:FACE</button>
+                                <button class="tui-button blue-168 white-255-text model-select-btn" data-model="facemesh">3:MESH</button>
+                                <button class="tui-button blue-168 white-255-text model-select-btn" data-model="pose">4:POSE</button>
+                            </div>
+
+                            <!-- Camera Toggles & FPS -->
+                            <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: flex-end;">
+                                <div style="display: flex; flex-direction: column; gap: 4px;">
+                                    <label id="lbl_toggle_skeleton" class="tui-checkbox white-text" style="margin-bottom: 0;">
+                                        <b id="txt_toggle_skeleton" style="font-weight: normal;">Draw Hand Skeleton</b>
+                                        <input type="checkbox" id="chk_skeleton" checked />
+                                        <span></span>
+                                    </label>
+                                    <label id="lbl_toggle_pinch" class="tui-checkbox white-text" style="margin-bottom: 0;">
+                                        <b id="txt_toggle_pinch" style="font-weight: normal;">Draw Distance Line</b>
+                                        <input type="checkbox" id="chk_pinch" checked />
+                                        <span></span>
+                                    </label>
+                                </div>
+                                <span class="yellow-255-text" id="ui_fps">FPS: 0</span>
+                            </div>
+                        </fieldset>
+                    </div>
+                </div>
+
+                <!-- RIGHT COLUMN: 3 HAND READINGS, SERIAL CONFIG & TERMINAL -->
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+
+                    <!-- Panel A1: The Core Hand Readings (Shown when HANDS is active) -->
+                    <div id="panel_readings_hands" class="tui-window white-168 black-text full-width tui-no-shadow">
+                        <fieldset class="tui-fieldset tui-border-solid blue-border">
+                            <legend class="blue-168-text">[ HAND READINGS (SELECT TO SEND) ]</legend>
+
+                            <!-- 0. Hand Detected Boolean (0 or 1) -->
+                            <div class="bios-row">
+                                <label>
+                                    <input type="checkbox" id="chk_tx_hand" checked />
+                                    1. Hand Detected...:
+                                </label>
+                                <input type="text" id="ui_hand_detected" class="tui-input red-168 white-text" value="[FALSE (0)]" readonly style="width: 150px; text-align: center;" />
+                            </div>
+
+                            <!-- 1. Thumb-Index Distance -->
+                            <div class="bios-row">
+                                <label>
+                                    <input type="checkbox" id="chk_tx_dist" checked />
+                                    2. Thumb-Index Dist:
+                                </label>
+                                <input type="text" id="ui_distance" class="tui-input yellow-168 black-text" value="[0 px]" readonly style="width: 150px; text-align: center;" />
+                            </div>
+
+                            <!-- 2. Open Fingers Count -->
+                            <div class="bios-row">
+                                <label>
+                                    <input type="checkbox" id="chk_tx_count" checked />
+                                    3. Open Fingers....:
+                                </label>
+                                <input type="text" id="ui_finger_count" class="tui-input cyan-168 black-text" value="[0 / 5]" readonly style="width: 150px; text-align: center;" />
+                            </div>
+
+                            <!-- 3. Finger States (Open/Closed) -->
+                            <div class="bios-row" style="margin-bottom: 4px;">
+                                <label>
+                                    <input type="checkbox" id="chk_tx_states" checked />
+                                    4. Fingers State...:
+                                </label>
+                                <input type="text" id="ui_finger_binary" class="tui-input blue-168 yellow-255-text" value="[00000]" readonly style="width: 150px; text-align: center;" />
+                            </div>
+
+                            <!-- Visual 5 Fingers Boxes -->
+                            <div class="finger-boxes">
+                                <div class="finger-item closed" id="fbox_0">THUMB<br><b id="fval_0">SHUT (0)</b></div>
+                                <div class="finger-item closed" id="fbox_1">INDEX<br><b id="fval_1">SHUT (0)</b></div>
+                                <div class="finger-item closed" id="fbox_2">MID<br><b id="fval_2">SHUT (0)</b></div>
+                                <div class="finger-item closed" id="fbox_3">RING<br><b id="fval_3">SHUT (0)</b></div>
+                                <div class="finger-item closed" id="fbox_4">PINKY<br><b id="fval_4">SHUT (0)</b></div>
+                            </div>
+                        </fieldset>
+                    </div>
+
+                    <!-- Panel A2: The 4 Core Face Readings (Shown when FACE is active) -->
+                    <div id="panel_readings_face" class="tui-window white-168 black-text full-width tui-no-shadow" style="display: none;">
+                        <fieldset class="tui-fieldset tui-border-solid blue-border">
+                            <legend class="blue-168-text">[ FACE READINGS (SELECT TO SEND) ]</legend>
+
+                            <!-- 1. Face Detected Boolean (0 or 1) -->
+                            <div class="bios-row">
+                                <label>
+                                    <input type="checkbox" id="chk_tx_face_det" checked />
+                                    1. Face Detected...:
+                                </label>
+                                <input type="text" id="ui_face_detected" class="tui-input red-168 white-text" value="[FALSE (0)]" readonly style="width: 150px; text-align: center;" />
+                            </div>
+
+                            <!-- 2. Face Center X / Y Coordinates -->
+                            <div class="bios-row">
+                                <label>
+                                    <input type="checkbox" id="chk_tx_face_xy" checked />
+                                    2. Face Center X/Y.:
+                                </label>
+                                <input type="text" id="ui_face_xy" class="tui-input cyan-168 black-text" value="[X:0 Y:0]" readonly style="width: 150px; text-align: center;" />
+                            </div>
+
+                            <!-- 3. Face Box Width / Proximity -->
+                            <div class="bios-row">
+                                <label>
+                                    <input type="checkbox" id="chk_tx_face_size" checked />
+                                    3. Face Box Width..:
+                                </label>
+                                <input type="text" id="ui_face_size" class="tui-input yellow-168 black-text" value="[0 px]" readonly style="width: 150px; text-align: center;" />
+                            </div>
+
+                            <!-- 4. Head Tilt Angle (Degrees) -->
+                            <div class="bios-row" style="margin-bottom: 4px;">
+                                <label>
+                                    <input type="checkbox" id="chk_tx_face_tilt" checked />
+                                    4. Head Tilt Angle.:
+                                </label>
+                                <input type="text" id="ui_face_tilt" class="tui-input blue-168 yellow-255-text" value="[0 deg]" readonly style="width: 150px; text-align: center;" />
+                            </div>
+                        </fieldset>
+                    </div>
+
+                    <!-- Panel A3: The Core Face Mesh Readings (Shown when MESH is active) -->
+                    <div id="panel_readings_mesh" class="tui-window white-168 black-text full-width tui-no-shadow" style="display: none;">
+                        <fieldset class="tui-fieldset tui-border-solid blue-border">
+                            <legend class="blue-168-text">[ FACE MESH READINGS (SELECT TO SEND) ]</legend>
+
+                            <!-- 1. Mesh Detected Boolean (0 or 1) -->
+                            <div class="bios-row">
+                                <label>
+                                    <input type="checkbox" id="chk_tx_mesh_det" checked />
+                                    1. Mesh Detected...:
+                                </label>
+                                <input type="text" id="ui_mesh_detected" class="tui-input red-168 white-text" value="[FALSE (0)]" readonly style="width: 150px; text-align: center;" />
+                            </div>
+
+                            <!-- 2. Nose Tip X / Y Coordinates -->
+                            <div class="bios-row">
+                                <label>
+                                    <input type="checkbox" id="chk_tx_mesh_nose" checked />
+                                    2. Nose Tip X/Y....:
+                                </label>
+                                <input type="text" id="ui_mesh_nose" class="tui-input cyan-168 black-text" value="[X:0 Y:0]" readonly style="width: 150px; text-align: center;" />
+                            </div>
+
+                            <!-- 3. Head Yaw / Pitch Angles -->
+                            <div class="bios-row">
+                                <label>
+                                    <input type="checkbox" id="chk_tx_mesh_yawpitch" checked />
+                                    3. Head Yaw/Pitch..:
+                                </label>
+                                <input type="text" id="ui_mesh_yawpitch" class="tui-input blue-168 yellow-255-text" value="[Y:0 P:0]" readonly style="width: 150px; text-align: center;" />
+                            </div>
+
+                            <!-- 4. Mouth State Boolean (1 = OPEN / 0 = SHUT) -->
+                            <div class="bios-row">
+                                <label>
+                                    <input type="checkbox" id="chk_tx_mesh_mouth" checked />
+                                    4. Mouth Open......:
+                                </label>
+                                <input type="text" id="ui_mesh_mouth" class="tui-input red-168 white-text" value="[FALSE (0)]" readonly style="width: 150px; text-align: center;" />
+                            </div>
+
+                            <!-- 5. Both Eyes Open Boolean (1 = TRUE / 0 = FALSE) -->
+                            <div class="bios-row" style="margin-bottom: 4px;">
+                                <label>
+                                    <input type="checkbox" id="chk_tx_mesh_eyes" checked />
+                                    5. Both Eyes Open..:
+                                </label>
+                                <input type="text" id="ui_mesh_eyes" class="tui-input red-168 white-text" value="[FALSE (0)]" readonly style="width: 150px; text-align: center;" />
+                            </div>
+
+                            <!-- Visual Eyes + Mouth Status Boxes -->
+                            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 8px; text-align: center;">
+                                <div class="finger-item closed" id="ebox_both" style="padding: 6px;">BOTH EYES: <b id="eval_both">FALSE (0)</b></div>
+                                <div class="finger-item closed" id="mbox_state" style="padding: 6px;">MOUTH: <b id="mval_state">FALSE (0)</b></div>
+                            </div>
+                        </fieldset>
+                    </div>
+
+                    <!-- Panel A4: The 5 Core Pose Readings (Shown when POSE is active) -->
+                    <div id="panel_readings_pose" class="tui-window white-168 black-text full-width tui-no-shadow" style="display: none;">
+                        <fieldset class="tui-fieldset tui-border-solid blue-border">
+                            <legend class="blue-168-text">[ POSE READINGS (SELECT TO SEND) ]</legend>
+
+                            <!-- 1. Body Detected Boolean (0 or 1) -->
+                            <div class="bios-row">
+                                <label>
+                                    <input type="checkbox" id="chk_tx_pose_det" checked />
+                                    1. Body Detected...:
+                                </label>
+                                <input type="text" id="ui_pose_detected" class="tui-input red-168 white-text" value="[FALSE (0)]" readonly style="width: 150px; text-align: center;" />
+                            </div>
+
+                            <!-- 2. Elbow Angles [Left, Right] (0..180 deg) -->
+                            <div class="bios-row">
+                                <label>
+                                    <input type="checkbox" id="chk_tx_pose_elbows" checked />
+                                    2. Elbow Angles....:
+                                </label>
+                                <input type="text" id="ui_pose_elbows" class="tui-input cyan-168 black-text" value="[L:0° R:0°]" readonly style="width: 150px; text-align: center;" />
+                            </div>
+
+                            <!-- 3. Shoulder Angles [Left, Right] (0..180 deg) -->
+                            <div class="bios-row">
+                                <label>
+                                    <input type="checkbox" id="chk_tx_pose_shoulders" checked />
+                                    3. Shoulder Angles.:
+                                </label>
+                                <input type="text" id="ui_pose_shoulders" class="tui-input blue-168 yellow-255-text" value="[L:0° R:0°]" readonly style="width: 150px; text-align: center;" />
+                            </div>
+
+                            <!-- 4. Wrists Distance (px) -->
+                            <div class="bios-row">
+                                <label>
+                                    <input type="checkbox" id="chk_tx_pose_wrists" checked />
+                                    4. Wrists Distance.:
+                                </label>
+                                <input type="text" id="ui_pose_wrists" class="tui-input yellow-168 black-text" value="[0 px]" readonly style="width: 150px; text-align: center;" />
+                            </div>
+
+                            <!-- 5. Hands Raised State [Left, Right] -->
+                            <div class="bios-row" style="margin-bottom: 4px;">
+                                <label>
+                                    <input type="checkbox" id="chk_tx_pose_arms" checked />
+                                    5. Hands Raised....:
+                                </label>
+                                <input type="text" id="ui_pose_arms" class="tui-input blue-168 yellow-255-text" value="[00]" readonly style="width: 150px; text-align: center;" />
+                            </div>
+
+                            <!-- Visual Left/Right Arm Raised Status Boxes -->
+                            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 8px; text-align: center;">
+                                <div class="finger-item closed" id="abox_left" style="padding: 6px;">LEFT ARM: <b id="aval_left">DOWN (0)</b></div>
+                                <div class="finger-item closed" id="abox_right" style="padding: 6px;">RIGHT ARM: <b id="aval_right">DOWN (0)</b></div>
+                            </div>
+                        </fieldset>
+                    </div>
+
+                    <!-- Panel B: Serial Port Hardware Setup -->
+                    <div class="tui-window white-168 black-text full-width tui-no-shadow">
+                        <fieldset class="tui-fieldset tui-border-solid blue-border">
+                            <legend class="blue-168-text">[ UART / SERIAL PORT SETUP ]</legend>
+
+                            <div class="bios-row">
+                                <label>Port Status........:</label>
+                                <input type="text" id="ui_serial_status" class="tui-input red-168 white-text" value="[OFFLINE]" readonly style="width: 150px; text-align: center;" />
+                            </div>
+
+                            <div class="bios-row">
+                                <label>Baud Rate..........:</label>
+                                <select id="select_baud" class="tui-input white-255 black-text" style="width: 150px;">
+                                    <option value="9600">9600 Baud</option>
+                                    <option value="57600">57600 Baud</option>
+                                    <option value="115200" selected>115200 Baud</option>
+                                </select>
+                            </div>
+
+                            <div class="bios-row">
+                                <label>TX Interval........:</label>
+                                <select id="select_rate" class="tui-input white-255 black-text" style="width: 150px;">
+                                    <option value="30">30 ms (33 Hz)</option>
+                                    <option value="50" selected>50 ms (20 Hz)</option>
+                                    <option value="100">100 ms (10 Hz)</option>
+                                    <option value="250">250 ms (4 Hz)</option>
+                                </select>
+                            </div>
+
+                            <div class="bios-row">
+                                <label>Sending Packet.....:</label>
+                                <input type="text" id="ui_packet_preview" class="tui-input blue-168 yellow-255-text" value="D:0,C:0,F:00000" readonly style="width: 150px; text-align: center;" />
+                            </div>
+
+                            <div style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+                                <button id="btn_serial_connect" class="tui-button green-168 black-255-text">CONNECT MCU [F2]</button>
+                                <span class="blue-168-text">TX Pkts: <b id="ui_tx_count">0</b></span>
+                            </div>
+                        </fieldset>
+                    </div>
+
+                    <!-- Panel C: Live Serial Monitor Log -->
+                    <div class="tui-window blue-168 white-text full-width tui-no-shadow">
+                        <fieldset class="tui-fieldset">
+                            <legend class="yellow-255-text">[ SERIAL MONITOR // TX/RX ]</legend>
+
+                            <!-- Monitor Filter (BOTH / TX / RX) & AutoScroll Toggle -->
+                            <div style="margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span class="cyan-255-text">View:</span>
+                                    <select id="select_log_filter" class="tui-input white-255 black-text" style="width: 125px;">
+                                        <option value="ALL" selected>BOTH (TX+RX)</option>
+                                        <option value="TX">TX ONLY</option>
+                                        <option value="RX">RX ONLY</option>
+                                    </select>
+                                </div>
+                                <label class="tui-checkbox white-text" style="margin-bottom: 0;">AutoScroll
+                                    <input type="checkbox" id="chk_autoscroll" checked />
+                                    <span></span>
+                                </label>
+                            </div>
+
+                            <textarea id="serial_terminal" class="tui-textarea full-width black-168 green-255-text" style="height: 95px; font-size: 13px;" readonly></textarea>
+
+                            <div style="margin-top: 6px; display: flex; gap: 6px;">
+                                <input type="text" id="input_custom_cmd" class="tui-input white-255 black-text" placeholder="Send command..." style="flex: 1;" />
+                                <button id="btn_send_custom" class="tui-button cyan-168 black-text">SEND</button>
+                                <button id="btn_clear_log" class="tui-button orange-168 white-text">CLR</button>
+                            </div>
+                        </fieldset>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB 2: ARDUINO / ESP32 READY CODE ==================== -->
+        <div class="tui-tab-content tui-content" id="tab-arduino" style="display: none; padding: 14px;">
+            <div class="tui-panel cyan-168 full-width black-255-text tui-no-shadow" style="padding: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                <div>
+                    <b>ARDUINO / ESP32 RECEIVER SKETCH:</b> Select the sketch for your active AI model:
+                </div>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                    <button id="btn_sketch_hands" class="tui-button blue-168 yellow-255-text">1: HANDS SKETCH</button>
+                    <button id="btn_sketch_face" class="tui-button white-255 black-text">2: FACE SKETCH</button>
+                    <button id="btn_sketch_mesh" class="tui-button white-255 black-text">3: MESH SKETCH</button>
+                    <button id="btn_sketch_pose" class="tui-button white-255 black-text">4: POSE SKETCH</button>
+                </div>
+            </div>
+
+            <!-- 1. HANDS ARDUINO CODE -->
+            <div id="code_arduino_hands" class="code-box">/*
+ * [1: HANDS MODEL] MediaPipe-MCU-Studio -&gt; Arduino / ESP32 Serial Receiver
+ * Packet Format: "H:1,D:120,C:5,F:11111\n"
+ *   H = Hand Detected Boolean (1 = True / 0 = False)
+ *   D = Thumb-Index Distance (px)
+ *   C = Open Fingers Count (0..5)
+ *   F = 5-Finger Binary State (Thumb, Index, Middle, Ring, Pinky)
+ */
+
+bool handDetected = false;
+int thumbIndexDist = 0;
+int openFingersCount = 0;
+String fingersState = "00000";
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("MCU_READY: Waiting for MediaPipe HANDS Data...");
+}
+
+String getValue(String data, String key) {
+  int start = data.indexOf(key + ":");
+  if (start == -1) return "";
+  start += key.length() + 1;
+  int end = data.indexOf(",", start);
+  if (end == -1) end = data.length();
+  return data.substring(start, end);
+}
+
+void loop() {
+  if (Serial.available() &gt; 0) {
+    String line = Serial.readStringUntil('\n');
+    line.trim();
+    String handStr   = getValue(line, "H");
+    String distStr   = getValue(line, "D");
+    String countStr  = getValue(line, "C");
+    String statesStr = getValue(line, "F"); // e.g. "10100"
+  } 
+}</div>
+
+            <!-- 2. FACE ARDUINO CODE -->
+            <div id="code_arduino_face" class="code-box" style="display: none;">/*
+ * [2: FACE MODEL] MediaPipe-MCU-Studio -&gt; Arduino / ESP32 Serial Receiver
+ * Packet Format: "FD:1,X:320,Y:240,W:180,T:-5\n"
+ *   FD = Face Detected Boolean (1 = True / 0 = False)
+ *   X  = Face Center X Coordinate (px)
+ *   Y  = Face Center Y Coordinate (px)
+ *   W  = Face Box Width / Proximity (px)
+ *   T  = Head Tilt Angle in Degrees (-45..+45)
+ */
+
+bool faceDetected = false;
+int faceX = 0;
+int faceY = 0;
+int faceWidth = 0;
+int headTilt = 0;
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("MCU_READY: Waiting for MediaPipe FACE Data...");
+}
+
+String getValue(String data, String key) {
+  int start = data.indexOf(key + ":");
+  if (start == -1) return "";
+  start += key.length() + 1;
+  int end = data.indexOf(",", start);
+  if (end == -1) end = data.length();
+  return data.substring(start, end);
+}
+
+void loop() {
+  if (Serial.available() &gt; 0) {
+    String line = Serial.readStringUntil('\n');
+    line.trim();
+    String faceStr  = getValue(line, "FD");
+    String xStr     = getValue(line, "X");
+    String yStr     = getValue(line, "Y");
+    String widthStr = getValue(line, "W");
+    String tiltStr  = getValue(line, "T");
+  } 
+}</div>
+
+            <!-- 3. FACE MESH ARDUINO CODE -->
+            <div id="code_arduino_mesh" class="code-box" style="display: none;">/*
+ * [3: FACE MESH MODEL] MediaPipe-MCU-Studio -&gt; Arduino / ESP32 Serial Receiver
+ * Packet Format: "MD:1,NX:320,NY:240,Y:10,P:-5,M:0,E:1\n"
+ *   MD = Mesh Detected Boolean (1 = True / 0 = False)
+ *   NX = Nose Tip X Coordinate (px)
+ *   NY = Nose Tip Y Coordinate (px)
+ *   Y  = Head Yaw Left/Right Angle (-45..+45 deg)
+ *   P  = Head Pitch Up/Down Angle (-45..+45 deg)
+ *   M  = Mouth Open Boolean (1 = True [Open] / 0 = False [Closed])
+ *   E  = Both Eyes Open Boolean (1 = True [Open] / 0 = False [Closed])
+ */
+
+bool meshDetected = false;
+int noseX = 0;
+int noseY = 0;
+int headYaw = 0;
+int headPitch = 0;
+bool mouthOpen = false;
+bool eyesOpen = false;
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("MCU_READY: Waiting for MediaPipe FACE MESH Data...");
+}
+
+String getValue(String data, String key) {
+  int start = data.indexOf(key + ":");
+  if (start == -1) return "";
+  start += key.length() + 1;
+  int end = data.indexOf(",", start);
+  if (end == -1) end = data.length();
+  return data.substring(start, end);
+}
+
+void loop() {
+  if (Serial.available() &gt; 0) {
+    String line = Serial.readStringUntil('\n');
+    line.trim();
+    String meshStr  = getValue(line, "MD");
+    String noseXStr = getValue(line, "NX");
+    String noseYStr = getValue(line, "NY");
+    String yawStr   = getValue(line, "Y");
+    String pitchStr = getValue(line, "P");
+    String mouthStr = getValue(line, "M"); // "1" = True (Open), "0" = False (Closed)
+    String eyesStr  = getValue(line, "E"); // "1" = True (Open), "0" = False (Closed)
+  } 
+}</div>
+
+            <!-- 4. POSE ARDUINO CODE -->
+            <div id="code_arduino_pose" class="code-box" style="display: none;">/*
+ * [4: POSE MODEL] MediaPipe-MCU-Studio -&gt; Arduino / ESP32 Serial Receiver
+ * Packet Format: "PD:1,EL:160,ER:90,SL:45,SR:110,WD:250,AR:01\n"
+ *   PD = Body Detected Boolean (1 = True / 0 = False)
+ *   EL = Left Elbow Angle (0..180 deg)
+ *   ER = Right Elbow Angle (0..180 deg)
+ *   SL = Left Shoulder Elevation Angle (0..180 deg)
+ *   SR = Right Shoulder Elevation Angle (0..180 deg)
+ *   WD = Wrists Distance (px)
+ *   AR = Hands Raised State [LeftArm, RightArm] ("11"=Both Up, "00"=Both Down)
+ */
+
+bool bodyDetected = false;
+int leftElbow = 0;
+int rightElbow = 0;
+int leftShoulder = 0;
+int rightShoulder = 0;
+int wristsDist = 0;
+String armsState = "00";
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("MCU_READY: Waiting for MediaPipe POSE Data...");
+}
+
+String getValue(String data, String key) {
+  int start = data.indexOf(key + ":");
+  if (start == -1) return "";
+  start += key.length() + 1;
+  int end = data.indexOf(",", start);
+  if (end == -1) end = data.length();
+  return data.substring(start, end);
+}
+
+void loop() {
+  if (Serial.available() &gt; 0) {
+    String line = Serial.readStringUntil('\n');
+    line.trim();
+    String bodyStr  = getValue(line, "PD");
+    String elLStr   = getValue(line, "EL");
+    String elRStr   = getValue(line, "ER");
+    String shLStr   = getValue(line, "SL");
+    String shRStr   = getValue(line, "SR");
+    String wDistStr = getValue(line, "WD");
+    String armsStr  = getValue(line, "AR"); // e.g. "00", "10", "01", "11"
+  } 
+}</div>
+        </div>
+
+        <!-- ==================== TAB 3: SERIALBRIDGE JS DOCUMENTATION ==================== -->
+        <div class="tui-tab-content tui-content" id="tab-docs" style="display: none; padding: 14px;">
+            <div class="tui-panel cyan-168 full-width black-255-text tui-no-shadow" style="padding: 8px; margin-bottom: 10px;">
+                <b>HOW TO USE SerialBridge.js IN YOUR OWN PROJECTS:</b> Include <code>./js/serial-bridge.js</code> in any HTML file to connect JavaScript with Arduino/ESP32.
+            </div>
+            <div class="code-box">// 1. Import the standalone library in HTML:
+// &lt;script src="./js/serial-bridge.js"&gt;&lt;/script&gt;
+
+// 2. Create a SerialBridge instance:
+const mcu = new SerialBridge({
+    baudRate: 115200,
+    sendIntervalMs: 50, // Automatically throttles data to 20Hz
+    onStatusChange: (connected, baud) =&gt; {
+        console.log("Connected:", connected, "Baud:", baud);
+    },
+    onReceive: (line) =&gt; {
+        console.log("From Arduino:", line);
+    }
+});
+
+// 3. Connect from a button click:
+document.getElementById("myBtn").onclick = () =&gt; mcu.connect(115200);
+
+// 4. Send MediaPipe or custom commands anywhere in your loop:
+mcu.sendRaw("H:1,D:125,C:5,F:11111");</div>
+        </div>
+
+        <!-- Bottom BIOS Status Bar -->
+        <div class="tui-statusbar absolute cyan-168">
+            <ul>
+                <li><a href="#!"><span class="white-255-text">F2</span> Connect/Disconnect Serial</a></li>
+                <span class="tui-statusbar-divider"></span>
+                <li><a href="#!"><span class="white-255-text">F3</span> Cycle AI Model</a></li>
+                <span class="tui-statusbar-divider"></span>
+                <li><a href="#!"><span class="white-255-text">F9</span> Clear Terminal</a></li>
+                <span class="tui-statusbar-divider"></span>
+                <li><a href="#!"><span class="white-255-text">[X]</span> Select Readings to Send</a></li>
+            </ul>
+        </div>
+
+    </div>
+
+    <!-- Custom SerialBridge Library & Unified BIOS AI Controller -->
+    <script src="./js/serial-bridge.js"></script>
+    <script src="./js/bios-ai-app.js"></script>
+</body>
+
+</html>
