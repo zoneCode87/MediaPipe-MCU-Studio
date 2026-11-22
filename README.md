@@ -2,6 +2,10 @@
 
 A browser-based **MediaPipe Computer Vision & Microcontroller Serial Studio** that extracts and stabilizes real-time AI telemetry directly in the browser and streams it to **Arduino, ESP32, ESP8266, or STM32** microcontrollers via the **Web Serial API** (`SerialBridge.js`) — with **zero Python or OpenCV installation required**.
 
+### 🌐 Live Web Studio (GitHub Pages)
+👉 **[Launch MediaPipe-MCU-Studio Live](https://zonecode87.github.io/MediaPipe-MCU-Studio/)**  
+*(Open in **Google Chrome** or **Microsoft Edge** to use the Web Serial API)*
+
 ---
 
 ## Interface Previews
@@ -143,7 +147,7 @@ MediaPipe-MCU-Studio/
 
 ## Quick Start
 
-1. Open `index.html` in **Google Chrome** or **Microsoft Edge** (using VS Code **Live Server**, `localhost`, or **GitHub Pages**).
+1. Open the **[Live Web Studio](https://zonecode87.github.io/MediaPipe-MCU-Studio/)** in **Google Chrome** or **Microsoft Edge** (or run `index.html` locally via VS Code **Live Server**).
 2. Open **Tab 2 (`2. Arduino / ESP32 Code`)**, copy the sketch for your selected model, and upload it to your Arduino or ESP32.
 3. Close the Arduino IDE Serial Monitor so the COM port is free.
 4. In the web interface, select your **Baud Rate** (`115200`), check `[X]` next to the readings you want to send, and click **CONNECT MCU [F2]**.
